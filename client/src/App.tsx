@@ -51,8 +51,8 @@ export const App = (): JSX.Element => {
     <div className="flex min-h-screen flex-col">
       <Header connected={feed.connected} stats={feed.stats} />
       <main className="grid flex-1 grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <section className="flex min-h-[420px] flex-col gap-3">
-          <div className="min-h-[420px] flex-1">
+        <section className="flex min-h-105 flex-col gap-3">
+          <div className="min-h-105 flex-1">
             <SchematicMap
               routes={routes ?? []}
               vehicles={vehicles}
