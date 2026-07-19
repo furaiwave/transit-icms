@@ -2,14 +2,22 @@ import { Injectable } from "@nestjs/common";
 import { EtaInfo, FilteredState, FrameOf, Kmh, Lat, Lon, Meters, ProcessedFrame, Seconds, TelemetryFrame, VehicleId, haversineMaters, kmhToMetersPerSec } from "../../shared/src";
 import { GtfsService } from "../gtfs/gtfs.service";
 import { RouteModel } from "../gtfs/route.model";
+import type { KalmanStep } from "./kalman";
+import { MODEL_PARAMS } from "./params";
 import { projectOnRoute } from "./route.projection";
 import { VehicleTracker } from "./tracker";
 
-const STALE_MS = 60_000
-const JUMP_IMPLIED_KMH = 160
-const JUMP_MIN_METERS = 120
-const OFF_ROUTE_METERS = 200
-const Z_THRESHOLD = 3
+const {
+  staleMs: STALE_MS,
+  jumpImpliedKmh: JUMP_IMPLIED_KMH,
+  jumpMinMeters: JUMP_MIN_METERS,
+  minFramesForJump: MIN_FRAMES_FOR_JUMP,
+  offRouteMeters: OFF_ROUTE_METERS,
+  zThreshold: Z_THRESHOLD,
+  minSamplesForZ: MIN_SAMPLES_FOR_Z,
+  etaLookaheadMeters: ETA_LOOKAHEAD_M,
+  etaMinSpeedMs: ETA_MIN_SPEED_MS,
+} = MODEL_PARAMS
 
 @Injectable()
 export class PipelineService{
@@ -19,6 +27,23 @@ export class PipelineService{
 
   reset(): void {
     this.trackers.clear()
+  }
+
+  /** Борти, для яких уже існує стан фільтра. */
+  get tracked(): readonly VehicleId[] {
+    return [...this.trackers.keys()]
+  }
+
+  /**
+   * Останній такт фільтра Калмана для борту — джерело числового прикладу
+   * у звіті. Повертає null, доки борт не пройшов жодного update.
+   */
+  kalmanTrace(vehicleId: VehicleId): { lat: KalmanStep; lon: KalmanStep; frames: number } | null {
+    const tracker = this.trackers.get(vehicleId)
+    const lat = tracker?.kalmanLat.lastStep
+    const lon = tracker?.kalmanLon.lastStep
+    if (!tracker || !lat || !lon) return null
+    return { lat, lon, frames: tracker.frames }
   }
 
   process(frame: TelemetryFrame): ProcessedFrame {
@@ -46,10 +71,10 @@ export class PipelineService{
 
     const innovation = haversineMaters(predictedLat, predictedLon, frame.lat, frame.lon)
     const impliedKmh = (innovation / dt) * 3.6
-    const isJump = tracker.frames > 3 && innovation > JUMP_MIN_METERS && impliedKmh > JUMP_IMPLIED_KMH
+    const isJump = tracker.frames > MIN_FRAMES_FOR_JUMP && innovation > JUMP_MIN_METERS && impliedKmh > JUMP_IMPLIED_KMH
 
     const zScore = tracker.speedStats.zScore(frame.speedKmh)
-    const isSpike = tracker.speedStats.count >= 12 && Math.abs(zScore) > Z_THRESHOLD && frame.speedKmh > tracker.speedStats.mean
+    const isSpike = tracker.speedStats.count >= MIN_SAMPLES_FOR_Z && Math.abs(zScore) > Z_THRESHOLD && frame.speedKmh > tracker.speedStats.mean
 
     let filteredLat = predictedLat
     let filteredLon = predictedLon
@@ -58,7 +83,11 @@ export class PipelineService{
       filteredLon = Lon(tracker.kalmanLon.update(frame.lon))
     }
 
-    tracker.touch(frame.ts, isSpike ? Kmh(tracker.emaSpeed.current) : frame.speedKmh)
+    tracker.touch(
+      frame.ts,
+      frame.speedKmh,
+      isSpike ? Kmh(tracker.emaSpeed.current) : frame.speedKmh
+    )
 
     const route = this.gtfs.byId(frame.routeId)
     const { filtered, eta, offRouteMeters } = this.finalize(
@@ -149,11 +178,11 @@ export class PipelineService{
   }
 
   private eta(route: RouteModel, state: FilteredState): EtaInfo | null {
-    const next = route.stops.find((s) => s.distAlong > state.distAlong + 15) ?? route.stops[0]
+    const next = route.stops.find((s) => s.distAlong > state.distAlong + ETA_LOOKAHEAD_M) ?? route.stops[0]
     if(!next) return null
     const rawDistance = next.distAlong - state.distAlong
     const distance = Meters(rawDistance >= 0 ? rawDistance : rawDistance + route.lengthMeters)
-    const speedMs = Math.max(1.5, kmhToMetersPerSec(state.speedKmh))
+    const speedMs = Math.max(ETA_MIN_SPEED_MS, kmhToMetersPerSec(state.speedKmh))
     return {
       stopId: next.stopId,
       stopName: next.name,

@@ -7,10 +7,18 @@ import { RouteModel, RoutePoint, RouteStopModel } from "./route.model";
 
 const ROUTE_COLORS = ['#38BDF8', '#FFB020', '#A78BFA', '#34D399', '#FB7185'] as const 
 
+/** Скільки записів дав кожен файл GTFS — джерело таблиці 1.2 звіту. */
+export interface GtfsFileStat {
+    readonly file: string
+    readonly rows: number
+    readonly bytes: number
+}
+
 @Injectable()
 export class GtfsService implements OnModuleInit {
     private readonly logger = new Logger(GtfsService.name)
     private routes: readonly RouteModel[] = []
+    private fileStats: readonly GtfsFileStat[] = []
 
     onModuleInit(): void {
         this.reload()
@@ -18,6 +26,11 @@ export class GtfsService implements OnModuleInit {
 
     get all(): readonly RouteModel[]{
         return this.routes
+    }
+
+    /** Статистика останнього завантаження — рахується під час reload(). */
+    get files(): readonly GtfsFileStat[] {
+        return this.fileStats
     }
 
     byId(routeId: RouteId): RouteModel | undefined {
@@ -38,11 +51,22 @@ export class GtfsService implements OnModuleInit {
 
     reload(): GtfsLoadResult {
         const dir = join(process.cwd(), 'data', 'gtfs')
-        const read = (name: string): string => readFileSync(join(dir, name), 'utf8')
+        const sizes = new Map<string, number>()
+        const read = (name: string): string => {
+            const text = readFileSync(join(dir, name), 'utf8')
+            sizes.set(name, Buffer.byteLength(text, 'utf8'))
+            return text
+        }
         const stops = ParseCSV(read('stops.txt'), ['stop_id', 'stop_name', 'stop_lat', 'stop_lon'])
         const routes = ParseCSV(read('routes.txt'), ['route_id', 'route_short_name', 'route_long_name'])
         const trips = ParseCSV(read('trips.txt'), ['route_id', 'trip_id'])
         const stopTime = ParseCSV(read('stop_times.txt'), ['trip_id', 'stop_id', 'stop_sequence'])
+        this.fileStats = [
+            { file: 'routes.txt', rows: routes.length, bytes: sizes.get('routes.txt') ?? 0 },
+            { file: 'trips.txt', rows: trips.length, bytes: sizes.get('trips.txt') ?? 0 },
+            { file: 'stops.txt', rows: stops.length, bytes: sizes.get('stops.txt') ?? 0 },
+            { file: 'stop_times.txt', rows: stopTime.length, bytes: sizes.get('stop_times.txt') ?? 0 },
+        ]
         const stopById = new Map(stops.map((s) => [s.stop_id, s] as const))
 
         this.routes = routes.map((route, i): RouteModel => {

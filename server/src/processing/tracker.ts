@@ -1,30 +1,32 @@
 import { Kmh, Latitude, Longitude, UnixMs } from "../../shared/src";
 import { Ema } from "./ema";
 import { Kalman1D } from "./kalman";
+import { MODEL_PARAMS, R_MEASURE } from "./params";
 import { RollingStats } from "./rolling-stats";
-
-const GPS_SIGMA_DEG = 15 / 111_320
-const R_MEASURE = GPS_SIGMA_DEG * GPS_SIGMA_DEG
-const Q_PROCESS = 2e-10
 
 export class VehicleTracker {
     readonly kalmanLat: Kalman1D
     readonly kalmanLon: Kalman1D
-    readonly emaSpeed = new Ema(0.3)
-    readonly speedStats = new RollingStats(30)
+    readonly emaSpeed = new Ema(MODEL_PARAMS.emaAlpha)
+    readonly speedStats = new RollingStats(MODEL_PARAMS.rollingWindow)
     frames = 0
     lastTs: UnixMs
 
     constructor(lat: Latitude, lon: Longitude, ts: UnixMs) {
-        this.kalmanLat = new Kalman1D(lat, Q_PROCESS, R_MEASURE)
-        this.kalmanLon = new Kalman1D(lon, Q_PROCESS, R_MEASURE)
+        this.kalmanLat = new Kalman1D(lat, MODEL_PARAMS.qProcess, R_MEASURE)
+        this.kalmanLon = new Kalman1D(lon, MODEL_PARAMS.qProcess, R_MEASURE)
         this.lastTs = ts
     }
 
-    touch(ts: UnixMs, speed: Kmh): void {
+    /**
+     * measured — сира виміряна швидкість, завжди йде у вікно статистики,
+     * інакше детектор викидів отруює власний базовий рівень і залипає.
+     * emaSpeed — захищене значення (на викиді підставляємо попередню EMA).
+     */
+    touch(ts: UnixMs, measured: Kmh, emaSpeed: Kmh = measured): void {
         this.lastTs = ts
         this.frames += 1
-        this.emaSpeed.push(speed)
-        this.speedStats.push(speed)
+        this.emaSpeed.push(emaSpeed)
+        this.speedStats.push(measured)
     }
 }

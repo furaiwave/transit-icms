@@ -24,9 +24,9 @@ export const projectOnRoute  = (
         const bx = (b.lon - a.lon) * kLon
         const by = (b.lat - a.lat) * kLat
         const len2 = bx * bx + by * by
-        const t = len2 < 1e-9 ? 0 : Math.min(1, Math.max(0, (ax * bx * ay * by) / len2))
+        const t = len2 < 1e-9 ? 0 : Math.min(1, Math.max(0, (ax * bx + ay * by) / len2))
         const px = a.lon + (t * bx) / kLon
-        const py = a.lat * (t * by) / kLat
+        const py = a.lat + (t * by) / kLat
         const offset = haversineMaters(lat, lon, Lat(py), Lon(px))
         if(offset < best.offsetMeters){
             const segLen = b.distAlong - a.distAlong

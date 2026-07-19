@@ -4,6 +4,7 @@ import { AnomalyLog } from '@/components/AnomalyLog';
 import { DispatchPanel } from '@/components/DispatchPanel';
 import { EtaBoard } from '@/components/EtaBoard';
 import { Header } from '@/components/Header';
+import { ResultsPage } from '@/components/ResultsPage';
 import { SchematicMap } from '@/components/SchematicMap';
 import { SpeedChart } from '@/components/SpeedChart';
 import { StatsCards } from '@/components/Stats';
@@ -11,6 +12,7 @@ import { VehicleList } from '@/components/VehicleList';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useApiQuery } from '@/hooks/useApiQuery';
+import { useHashRoute } from '@/hooks/useHashRoute';
 import { useTelemetryFeed } from '@/hooks/useTelemetryFeed';
 
 const TRACE_LIMIT = 180;
@@ -27,6 +29,7 @@ const snapshotToTracePoint = (s: VehicleSnapshot): HistoryPoint => ({
 });
 
 export const App = (): JSX.Element => {
+  const [route, navigate] = useHashRoute();
   const feed = useTelemetryFeed();
   const { data: routes } = useApiQuery('GET /api/routes');
   const [selectedId, setSelectedId] = useState<VehicleId | null>(null);
@@ -48,11 +51,16 @@ export const App = (): JSX.Element => {
   }, [selectedTs, selectedId]);
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Header connected={feed.connected} stats={feed.stats} />
-      <main className="grid flex-1 grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <section className="flex min-h-105 flex-col gap-3">
-          <div className="min-h-105 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Header connected={feed.connected} stats={feed.stats} route={route} onNavigate={navigate} />
+      {route === 'results' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ResultsPage />
+        </div>
+      ) : (
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden p-3 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
+          <div className="min-h-0 flex-1">
             <SchematicMap
               routes={routes ?? []}
               vehicles={vehicles}
@@ -64,7 +72,7 @@ export const App = (): JSX.Element => {
           {selectedId && <SpeedChart vehicleId={selectedId} live={selected} />}
         </section>
 
-        <aside className="flex flex-col gap-3">
+        <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto">
           <StatsCards stats={feed.stats} />
           <Card>
             <CardHeader>
@@ -101,6 +109,7 @@ export const App = (): JSX.Element => {
           />
         </aside>
       </main>
+      )}
     </div>
   );
 };

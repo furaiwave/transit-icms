@@ -1,5 +1,6 @@
 import type { ControlAck, ControlCommand, EtaBoardEntry, GtfsLoadResult, HistoryPoint, RouteDto, SimulationCommand, SimulationState, SystemStatsDto, VehicleSnapshot } from "./dto";
 import type { AnomalyRecord, ProcessedFrame } from "./processing";
+import type { ReportCommand, ReportDto } from "./report";
 import type { RawTelemetryInput } from "./telemetry";
 
 export type HttpMethod = 'GET' | 'POST'
@@ -11,6 +12,8 @@ export interface ApiContract {
     'GET /api/anomalies': { response: readonly AnomalyRecord[] }
     'GET /api/stats': { response: SystemStatsDto }
     'GET /api/eta': { response: readonly EtaBoardEntry[] }
+    'GET /api/report': { response: ReportDto }
+    'POST /api/report': { body: ReportCommand; response: ReportDto }
     'POST /api/telemetry': { body: RawTelemetryInput; response: ProcessedFrame }
     'POST /api/control': { body: ControlCommand; response: ControlAck }
     'POST /api/simulation': { body: SimulationCommand; response: SimulationState }
