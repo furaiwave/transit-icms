@@ -1,122 +1,106 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useMemo, useState, type JSX } from 'react';
+import type { HistoryPoint, VehicleId, VehicleSnapshot } from '@icms/shared';
+import { AnomalyLog } from '@/components/AnomalyLog';
+import { DispatchPanel } from '@/components/DispatchPanel';
+import { EtaBoard } from '@/components/EtaBoard';
+import { Header } from '@/components/Header';
+import { SchematicMap } from '@/components/SchematicMap';
+import { SpeedChart } from '@/components/SpeedChart';
+import { StatsCards } from '@/components/Stats';
+import { VehicleList } from '@/components/VehicleList';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { useTelemetryFeed } from '@/hooks/useTelemetryFeed';
 
-function App() {
-  const [count, setCount] = useState(0)
+const TRACE_LIMIT = 180;
+
+const snapshotToTracePoint = (s: VehicleSnapshot): HistoryPoint => ({
+  ts: s.updatedAt,
+  rawSpeedKmh: s.raw.speedKmh,
+  filteredSpeedKmh: s.filtered.speedKmh,
+  rawLat: s.raw.lat,
+  rawLon: s.raw.lon,
+  filteredLat: s.filtered.lat,
+  filteredLon: s.filtered.lon,
+  anomaly: s.lastAnomaly,
+});
+
+export const App = (): JSX.Element => {
+  const feed = useTelemetryFeed();
+  const { data: routes } = useApiQuery('GET /api/routes');
+  const [selectedId, setSelectedId] = useState<VehicleId | null>(null);
+  const [trace, setTrace] = useState<readonly HistoryPoint[]>([]);
+
+  const vehicles = useMemo(
+    () => [...feed.vehicles.values()].sort((a, b) => a.vehicleId.localeCompare(b.vehicleId)),
+    [feed.vehicles],
+  );
+  const selected = selectedId ? (feed.vehicles.get(selectedId) ?? null) : null;
+
+  useEffect(() => setTrace([]), [selectedId]);
+  const selectedTs = selected?.updatedAt ?? 0;
+  useEffect(() => {
+    if (!selected) return;
+    setTrace((prev) => [...prev, snapshotToTracePoint(selected)].slice(-TRACE_LIMIT));
+    // нова точка траси — новий кадр обраного борту
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTs, selectedId]);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="flex min-h-screen flex-col">
+      <Header connected={feed.connected} stats={feed.stats} />
+      <main className="grid flex-1 grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <section className="flex min-h-[420px] flex-col gap-3">
+          <div className="min-h-[420px] flex-1">
+            <SchematicMap
+              routes={routes ?? []}
+              vehicles={vehicles}
+              selectedId={selectedId}
+              selectedHistory={trace}
+              onSelect={setSelectedId}
+            />
+          </div>
+          {selectedId && <SpeedChart vehicleId={selectedId} live={selected} />}
+        </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
-}
-
-export default App
+        <aside className="flex flex-col gap-3">
+          <StatsCards stats={feed.stats} />
+          <Card>
+            <CardHeader>
+              <CardTitle>Оперативний стан</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-1">
+              <Tabs defaultValue="vehicles">
+                <TabsList>
+                  <TabsTrigger value="vehicles">Борти</TabsTrigger>
+                  <TabsTrigger value="anomalies">Аномалії</TabsTrigger>
+                  <TabsTrigger value="eta">Табло ETA</TabsTrigger>
+                </TabsList>
+                <TabsContent value="vehicles">
+                  <VehicleList
+                    vehicles={vehicles}
+                    routes={routes ?? []}
+                    selectedId={selectedId}
+                    onSelect={setSelectedId}
+                  />
+                </TabsContent>
+                <TabsContent value="anomalies">
+                  <AnomalyLog anomalies={feed.anomalies} />
+                </TabsContent>
+                <TabsContent value="eta">
+                  <EtaBoard />
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+          <DispatchPanel
+            selectedId={selectedId}
+            simulationRunning={feed.stats?.simulationRunning ?? false}
+            lastAck={feed.lastAck}
+          />
+        </aside>
+      </main>
+    </div>
+  );
+};
